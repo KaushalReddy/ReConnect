@@ -1,0 +1,85 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "ADMIN";
+    }
+
+    // users/{userId}
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId)
+                    && request.resource.data.uid == userId
+                    && request.resource.data.role in ["ALUMNI", "STUDENT", "FACULTY", "ADMIN"];
+      allow update: if isOwner(userId)
+                    && request.resource.data.role == resource.data.role;
+      allow delete: if false;
+    }
+
+    // alumniProfiles/{userId}
+    match /alumniProfiles/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId)
+                    && request.resource.data.userId == userId
+                    && get(/databases/$(database)/documents/users/$(userId)).data.role == "ALUMNI";
+      allow update: if isOwner(userId)
+                    && request.resource.data.userId == userId
+                    && resource.data.userId == userId;
+      allow delete: if false;
+    }
+
+    // mentorshipRequests/{requestId}
+    match /mentorshipRequests/{requestId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // conversations/{conversationId}
+    match /conversations/{conversationId} {
+      allow read, write: if isSignedIn();
+
+      // messages subcollection
+      match /messages/{messageId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    // mentorshipMeetings/{meetingId}
+    match /mentorshipMeetings/{meetingId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // engagementLogs/{logId}
+    match /engagementLogs/{logId} {
+      allow read, create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
+    // events/{eventId}
+    match /events/{eventId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // opportunities/{opportunityId}
+    match /opportunities/{opportunityId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Catch-all deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
