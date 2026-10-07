@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { EventDoc } from "@/types";
 
 interface Props {
@@ -21,7 +22,8 @@ function formatEventDate(ms: number) {
 
 export default function EventCard({ event, onEdit, onDelete, isAdmin }: Props) {
   const { day, month, time } = formatEventDate(event.date);
-  const isPast = event.date < Date.now();
+  const now = useMemo(() => Date.now(), []);
+  const isPast = event.date < now;
 
   return (
     <div

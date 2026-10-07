@@ -38,6 +38,7 @@ export default function EmailOtpVerification({
       setSuccessMsg(null);
       setIsVerified(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email]);
 
   useEffect(() => {
@@ -71,7 +72,11 @@ export default function EmailOtpVerification({
 
       setToken(data.token);
       setDevCode(data.devCode || null);
-      setSuccessMsg(`Verification code sent to ${targetEmail}. Please check your inbox.`);
+      setSuccessMsg(
+        data.devCode && data.message?.includes("email delivery unavailable")
+          ? `Code generated — use the preview code below to verify.`
+          : `Verification code sent to ${targetEmail}. Please check your inbox.`
+      );
       setCooldown(60);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to send OTP.";

@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
 import { initials } from "@/lib/utils";
 import type { MentorshipMeeting, MeetingStatus, UserDoc } from "@/types";
@@ -54,7 +55,8 @@ export default function MeetingCard({
   }
 
   const isScheduled = meeting.status === "scheduled" && meeting.scheduledAt;
-  const isPast = meeting.scheduledAt ? meeting.scheduledAt < Date.now() : false;
+  const now = useMemo(() => Date.now(), []);
+  const isPast = meeting.scheduledAt ? meeting.scheduledAt < now : false;
 
   return (
     <div className="card p-6 space-y-4">

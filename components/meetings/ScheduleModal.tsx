@@ -24,8 +24,7 @@ export default function ScheduleModal({
   onClose,
   onSave,
 }: ScheduleModalProps) {
-  // Format existing scheduledAt or default to tomorrow at 10:00 AM
-  const defaultDateStr = () => {
+  const [dateTime, setDateTime] = useState(() => {
     const d = meeting.scheduledAt
       ? new Date(meeting.scheduledAt)
       : new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -33,9 +32,7 @@ export default function ScheduleModal({
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
       d.getHours()
     )}:${pad(d.getMinutes())}`;
-  };
-
-  const [dateTime, setDateTime] = useState(defaultDateStr());
+  });
   const [topic, setTopic] = useState(meeting.topic || "1-on-1 Mentorship Kickoff");
   const [location, setLocation] = useState(meeting.location || "Google Meet / Video Call");
   const [meetingUrl, setMeetingUrl] = useState(meeting.meetingUrl || "");

@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import {
   RecaptchaVerifier,
   signInWithPhoneNumber,
+  linkWithPhoneNumber,
+  unlink,
   type ConfirmationResult,
   type UserCredential,
 } from "firebase/auth";
@@ -15,6 +17,7 @@ interface Props {
   onPhoneChange?: (phone: string) => void;
   className?: string;
   containerIdSuffix?: string;
+  mode?: "login" | "verify";
 }
 
 export default function PhoneOtpVerification({
@@ -23,6 +26,7 @@ export default function PhoneOtpVerification({
   onPhoneChange,
   className = "",
   containerIdSuffix = "default",
+  mode,
 }: Props) {
   const [phoneNumber, setPhoneNumber] = useState(initialPhoneNumber);
   const [otp, setOtp] = useState("");
@@ -74,22 +78,27 @@ export default function PhoneOtpVerification({
     }
 
     const container = document.getElementById(activeContainerId);
-    if (container) {
-      container.innerHTML = "";
+    if (!container) {
+      return null;
     }
 
-    const verifier = new RecaptchaVerifier(auth, activeContainerId, {
-      size: "invisible",
-      callback: () => {
-        // reCAPTCHA solved - allow signInWithPhoneNumber
-      },
-      "expired-callback": () => {
-        setError("reCAPTCHA expired. Please try sending the SMS code again.");
-      },
-    });
+    try {
+      const verifier = new RecaptchaVerifier(auth, container, {
+        size: "invisible",
+        callback: () => {
+          // reCAPTCHA solved
+        },
+        "expired-callback": () => {
+          setError("reCAPTCHA expired. Please try sending the SMS code again.");
+        },
+      });
 
-    recaptchaVerifierRef.current = verifier;
-    return verifier;
+      recaptchaVerifierRef.current = verifier;
+      return verifier;
+    } catch (err) {
+      console.warn("RecaptchaVerifier init error:", err);
+      return null;
+    }
   }
 
   function resetRecaptcha() {
@@ -117,7 +126,37 @@ export default function PhoneOtpVerification({
         throw new Error("Unable to initialize verification service.");
       }
 
-      const confirmation = await signInWithPhoneNumber(auth, formatted, verifier);
+      let confirmation: ConfirmationResult;
+      const isLoginIntent = mode === "login" || (mode === undefined && containerIdSuffix === "login");
+
+      if (isLoginIntent || !auth.currentUser) {
+        confirmation = await signInWithPhoneNumber(auth, formatted, verifier);
+      } else {
+        // User is currently authenticated: link phone number to current account without switching users
+        const hasPhone = auth.currentUser.providerData.some((p) => p.providerId === "phone");
+        if (hasPhone) {
+          try {
+            await unlink(auth.currentUser, "phone");
+          } catch {
+            // ignore
+          }
+        }
+        try {
+          confirmation = await linkWithPhoneNumber(auth.currentUser, formatted, verifier);
+        } catch (linkErr: unknown) {
+          const linkCode = (linkErr as { code?: string })?.code;
+          if (linkCode === "auth/provider-already-linked") {
+            try {
+              await unlink(auth.currentUser, "phone");
+            } catch {
+              // ignore
+            }
+            confirmation = await linkWithPhoneNumber(auth.currentUser, formatted, verifier);
+          } else {
+            throw linkErr;
+          }
+        }
+      }
       setConfirmationResult(confirmation);
       setSuccessMsg(`SMS verification code sent to ${formatted}.`);
       setCooldown(60);
@@ -129,12 +168,30 @@ export default function PhoneOtpVerification({
         setError("Invalid phone number format. Please include country code, e.g. +14155552671.");
       } else if (code === "auth/operation-not-allowed") {
         setError(
-          "SMS is restricted for this region (+91/India). Either enable India in Firebase Console > Authentication > Settings > SMS region policy, OR add this number under 'Phone numbers for testing' to test instantly."
+          "Phone authentication is not enabled or SMS is restricted for this region. Go to Firebase Console > Authentication > Sign-in method > Phone and enable it. For India (+91), also allow it under SMS region policy."
         );
       } else if (code === "auth/too-many-requests") {
         setError("Too many attempts. Please wait a few moments before trying again.");
       } else if (code === "auth/quota-exceeded") {
-        setError("SMS quota exceeded. If testing, please configure Firebase test phone numbers.");
+        setError(
+          "Firebase daily SMS quota exceeded (10 SMS/day for new projects). To test freely, add test phone numbers in Firebase Console > Authentication > Sign-in method > Phone > Phone numbers for testing (e.g. +1 555-010-0001 with code 123456)."
+        );
+      } else if (code === "auth/billing-not-enabled") {
+        setError(
+          "Real SMS delivery requires a Firebase Blaze (pay-as-you-go) plan. To test freely without billing, add your number under Firebase Console > Authentication > Sign-in method > Phone > 'Phone numbers for testing' (e.g. your number with code 123456)."
+        );
+      } else if (code === "auth/internal-error") {
+        setError(
+          "Phone authentication encountered an internal error. Please ensure: (1) Phone sign-in is enabled in Firebase Console > Authentication > Sign-in method, and (2) the reCAPTCHA domain is authorized in your Firebase project settings."
+        );
+      } else if (code === "auth/missing-client-identifier") {
+        setError(
+          "reCAPTCHA verification failed. Please refresh the page and try again. If the issue persists, ensure your domain is authorized in Firebase Console > Authentication > Settings."
+        );
+      } else if (code === "auth/captcha-check-failed") {
+        setError("reCAPTCHA verification failed. Please refresh the page and try again.");
+      } else if (code === "auth/network-request-failed") {
+        setError("Network error. Please check your internet connection and try again.");
       } else {
         setError(message || "Failed to send SMS code. Please verify the phone number.");
       }
@@ -175,6 +232,14 @@ export default function PhoneOtpVerification({
         setError("Invalid verification code. Please check the code received via SMS.");
       } else if (code === "auth/code-expired") {
         setError("SMS code has expired. Please request a new code.");
+        setConfirmationResult(null);
+        setOtp("");
+      } else if (code === "auth/credential-already-in-use") {
+        setError("This phone number is already linked to another account. Please use a different number.");
+      } else if (code === "auth/session-expired") {
+        setError("Verification session expired. Please request a new SMS code.");
+        setConfirmationResult(null);
+        setOtp("");
       } else {
         setError("Failed to verify code. Please try again.");
       }

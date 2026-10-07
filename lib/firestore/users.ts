@@ -10,7 +10,7 @@ import {
   getDocs,
   getCountFromServer,
 } from "firebase/firestore";
-import { db } from "@/firebase/config";
+import { auth, db } from "@/firebase/config";
 import type { UserDoc, UserRole } from "@/types";
 
 /**
@@ -58,7 +58,8 @@ export async function updateUserVerification(
     verificationMethod?: "EMAIL" | "PHONE" | "BOTH";
   }
 ): Promise<void> {
-  const ref = doc(db, "users", uid);
+  const targetUid = auth.currentUser?.uid || uid;
+  const ref = doc(db, "users", targetUid);
   await setDoc(ref, data, { merge: true });
 }
 

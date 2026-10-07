@@ -27,14 +27,17 @@ export default function OtpModal({
   const [email, setEmail] = useState(initialEmail || userDoc?.email || "");
   const [updating, setUpdating] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   async function handleEmailVerified(verifiedEmail: string) {
-    if (!userDoc) return;
+    const targetUid = userDoc?.uid;
+    if (!targetUid) return;
     setUpdating(true);
+    setErrorMsg(null);
     try {
-      await updateUserVerification(userDoc.uid, {
+      await updateUserVerification(targetUid, {
         isEmailVerified: true,
         verificationMethod: userDoc.isPhoneVerified ? "BOTH" : "EMAIL",
       });
@@ -43,18 +46,21 @@ export default function OtpModal({
       setTimeout(() => {
         onClose();
       }, 1200);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Failed to update email verification status:", err);
+      setErrorMsg("Failed to update verification in database. Please try again.");
     } finally {
       setUpdating(false);
     }
   }
 
   async function handlePhoneVerified(verifiedPhone: string) {
-    if (!userDoc) return;
+    const targetUid = userDoc?.uid;
+    if (!targetUid) return;
     setUpdating(true);
+    setErrorMsg(null);
     try {
-      await updateUserVerification(userDoc.uid, {
+      await updateUserVerification(targetUid, {
         phoneNumber: verifiedPhone,
         isPhoneVerified: true,
         verificationMethod: userDoc.isEmailVerified ? "BOTH" : "PHONE",
@@ -64,8 +70,9 @@ export default function OtpModal({
       setTimeout(() => {
         onClose();
       }, 1200);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Failed to update phone verification status:", err);
+      setErrorMsg("Failed to update verification in database. Please check your connection.");
     } finally {
       setUpdating(false);
     }
@@ -127,9 +134,16 @@ export default function OtpModal({
               onPhoneChange={setPhone}
               onVerified={handlePhoneVerified}
               containerIdSuffix="modal"
+              mode="verify"
             />
           )}
         </div>
+
+        {errorMsg && (
+          <p className="mt-4 rounded-lg bg-rust/10 p-2.5 text-center font-body text-xs font-medium text-rust">
+            {errorMsg}
+          </p>
+        )}
 
         {statusMsg && (
           <p className="mt-4 rounded-lg bg-verdant/15 p-2.5 text-center font-body text-xs font-medium text-verdant-dark">

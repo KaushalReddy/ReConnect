@@ -23,7 +23,7 @@ service cloud.firestore {
                     && request.resource.data.uid == userId
                     && request.resource.data.role in ["ALUMNI", "STUDENT", "FACULTY", "ADMIN"];
       allow update: if isOwner(userId)
-                    && request.resource.data.role == resource.data.role;
+                    && (!('role' in resource.data) || request.resource.data.role == resource.data.role);
       allow delete: if false;
     }
 

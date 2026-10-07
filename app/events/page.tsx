@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import EventCard from "@/components/events/EventCard";
@@ -216,11 +216,12 @@ function EventsContent() {
       setError("Failed to delete event. Please try again.");
     }
   }
+  const now = useMemo(() => Date.now(), []);
 
   if (!userDoc) return null;
 
-  const upcoming = (events ?? []).filter((e) => e.date >= Date.now());
-  const past = (events ?? []).filter((e) => e.date < Date.now());
+  const upcoming = (events ?? []).filter((e) => e.date >= now);
+  const past = (events ?? []).filter((e) => e.date < now);
 
   return (
     <DashboardShell role={userDoc.role}>

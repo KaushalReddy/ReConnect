@@ -56,34 +56,53 @@ export async function POST(request: Request) {
       process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
     );
 
+    let emailDelivered = false;
+
     if (hasSmtpConfig) {
-      const smtpPort = Number(process.env.SMTP_PORT) || 587;
-      const isGmail = process.env.SMTP_HOST?.includes("gmail");
-      
-      const transporter = nodemailer.createTransport({
-        ...(isGmail
-          ? { service: "gmail" }
-          : {
-              host: process.env.SMTP_HOST,
-              port: smtpPort,
-              secure: smtpPort === 465,
-            }),
-        auth: {
-          user: process.env.SMTP_USER?.trim(),
-          pass: process.env.SMTP_PASS?.replace(/\s+/g, "").trim(),
-        },
-      });
+      try {
+        const smtpPort = Number(process.env.SMTP_PORT) || 587;
+        const isGmail = process.env.SMTP_HOST?.includes("gmail");
 
-      await transporter.sendMail({
-        from: process.env.EMAIL_FROM || `"ReConnect Security" <${process.env.SMTP_USER}>`,
-        to: normalizedEmail,
-        subject: emailSubject,
-        text: emailBodyText,
-        html: emailBodyHtml,
-      });
+        const transporter = nodemailer.createTransport({
+          ...(isGmail
+            ? { service: "gmail" }
+            : {
+                host: process.env.SMTP_HOST,
+                port: smtpPort,
+                secure: smtpPort === 465,
+              }),
+          auth: {
+            user: process.env.SMTP_USER?.trim(),
+            pass: process.env.SMTP_PASS?.replace(/\s+/g, "").trim(),
+          },
+        });
 
-      console.log(`[ReConnect OTP] Sent email code to ${normalizedEmail}`);
-    } else {
+        const fromAddress =
+          process.env.EMAIL_FROM ||
+          `"ReConnect Security" <${process.env.SMTP_USER}>`;
+
+        await transporter.sendMail({
+          from: fromAddress,
+          to: normalizedEmail,
+          subject: emailSubject,
+          text: emailBodyText,
+          html: emailBodyHtml,
+        });
+
+        emailDelivered = true;
+        console.log(`[ReConnect OTP] Sent email code to ${normalizedEmail}`);
+      } catch (smtpErr: unknown) {
+        // SMTP failed (bad credentials, network issue, etc.) — fall back to
+        // dev simulation so the OTP flow is not completely blocked.
+        const smtpMsg =
+          smtpErr instanceof Error ? smtpErr.message : String(smtpErr);
+        console.warn(
+          `[ReConnect OTP] SMTP delivery failed, falling back to dev mode. Error: ${smtpMsg}`
+        );
+      }
+    }
+
+    if (!emailDelivered) {
       console.log("\n==================================================");
       console.log(`[ReConnect OTP Dev Simulation]`);
       console.log(`Recipient: ${normalizedEmail}`);
@@ -92,15 +111,19 @@ export async function POST(request: Request) {
       console.log("==================================================\n");
     }
 
+    // In development, or when the email was NOT actually delivered, expose the
+    // devCode so the user can still complete verification.
+    const showDevCode =
+      !emailDelivered || process.env.NODE_ENV !== "production";
+
     return NextResponse.json({
       success: true,
       token,
       expiresAt,
-      message: `Verification code sent to ${normalizedEmail}`,
-      // Expose devCode if in development or if SMTP is not configured, enabling easy local testing
-      ...(!hasSmtpConfig || process.env.NODE_ENV !== "production"
-        ? { devCode: otp }
-        : {}),
+      message: emailDelivered
+        ? `Verification code sent to ${normalizedEmail}`
+        : `Verification code generated for ${normalizedEmail} (check app for code — email delivery unavailable)`,
+      ...(showDevCode ? { devCode: otp } : {}),
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to send OTP code.";

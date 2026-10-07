@@ -9,9 +9,11 @@ import {
 } from "react";
 import {
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
   onAuthStateChanged,
   sendEmailVerification,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
   updateProfile,
   type User,
@@ -41,6 +43,7 @@ interface AuthContextValue {
   ) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   loginWithPhoneUser: (user: User) => Promise<void>;
+  loginWithGoogle: (role?: UserRole) => Promise<UserDoc | null>;
   logout: () => Promise<void>;
   refreshUserDoc: () => Promise<void>;
   sendNativeVerificationEmail: () => Promise<void>;
@@ -151,6 +154,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function loginWithGoogle(intendedRole: UserRole = "STUDENT"): Promise<UserDoc | null> {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    const credential = await signInWithPopup(auth, provider);
+    const user = credential.user;
+    setFirebaseUser(user);
+    let doc = await getUserDoc(user.uid);
+    if (!doc) {
+      await createUserDoc(
+        user.uid,
+        user.displayName || user.email?.split("@")[0] || "Google User",
+        user.email || "",
+        intendedRole,
+        {
+          isEmailVerified: true,
+          verificationMethod: "EMAIL",
+        }
+      );
+      doc = await getUserDoc(user.uid);
+    }
+    setUserDoc(doc);
+    return doc;
+  }
+
   async function sendNativeVerificationEmail() {
     if (auth.currentUser) {
       await sendEmailVerification(auth.currentUser);
@@ -170,6 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         login,
         loginWithPhoneUser,
+        loginWithGoogle,
         logout,
         refreshUserDoc,
         sendNativeVerificationEmail,
